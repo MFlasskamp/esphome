@@ -23,10 +23,12 @@ namespace adc {
 
 static const char *const TAG = "adc";
 
+#ifdef USE_ESP32
+adc_oneshot_unit_handle_t ADCSensor::adc_handle = nullptr;
+#endif
+
 // 13-bit for S2, 12-bit for all other ESP32 variants
 #ifdef USE_ESP32
-static const adc_bits_width_t ADC_WIDTH_MAX_SOC_BITS = static_cast<adc_bits_width_t>(ADC_WIDTH_MAX - 1);
-
 #ifndef SOC_ADC_RTC_MAX_BITWIDTH
 #if USE_ESP32_VARIANT_ESP32S2
 static const int32_t SOC_ADC_RTC_MAX_BITWIDTH = 13;
@@ -50,36 +52,17 @@ extern "C"
 #endif
 
 #ifdef USE_ESP32
-  if (this->channel1_ != ADC1_CHANNEL_MAX) {
-    adc1_config_width(ADC_WIDTH_MAX_SOC_BITS);
-    if (!this->autorange_) {
-      adc1_config_channel_atten(this->channel1_, this->attenuation_);
-    }
-  } else if (this->channel2_ != ADC2_CHANNEL_MAX) {
-    if (!this->autorange_) {
-      adc2_config_channel_atten(this->channel2_, this->attenuation_);
-    }
+  // Initialize the ADC unit
+  if (ADCSensor::adc_handle == nullptr) {
+    ESP_ERROR_CHECK_WITHOUT_ABORT(adc_oneshot_new_unit(&this->init_config, &ADCSensor::adc_handle));
   }
 
-  // load characteristics for each attenuation
-  for (int32_t i = 0; i <= ADC_ATTEN_DB_12_COMPAT; i++) {
-    auto adc_unit = this->channel1_ != ADC1_CHANNEL_MAX ? ADC_UNIT_1 : ADC_UNIT_2;
-    auto cal_value = esp_adc_cal_characterize(adc_unit, (adc_atten_t) i, ADC_WIDTH_MAX_SOC_BITS,
-                                              1100,  // default vref
-                                              &this->cal_characteristics_[i]);
-    switch (cal_value) {
-      case ESP_ADC_CAL_VAL_EFUSE_VREF:
-        ESP_LOGV(TAG, "Using eFuse Vref for calibration");
-        break;
-      case ESP_ADC_CAL_VAL_EFUSE_TP:
-        ESP_LOGV(TAG, "Using two-point eFuse Vref for calibration");
-        break;
-      case ESP_ADC_CAL_VAL_DEFAULT_VREF:
-      default:
-        break;
-    }
-  }
+  // Configure the ADC channel
+  ESP_ERROR_CHECK_WITHOUT_ABORT(adc_oneshot_config_channel(ADCSensor::adc_handle, this->channel_, &this->config));
 
+  // Initialize ADC calibration
+  do_calibration =
+      example_adc_calibration_init(this->init_config.unit_id, this->channel_, this->config.atten, &adc_cali_handle);
 #endif  // USE_ESP32
 
 #ifdef USE_RP2040
@@ -108,7 +91,7 @@ void ADCSensor::dump_config() {
   if (this->autorange_) {
     ESP_LOGCONFIG(TAG, "  Attenuation: auto");
   } else {
-    switch (this->attenuation_) {
+    switch (this->config.atten) {
       case ADC_ATTEN_DB_0:
         ESP_LOGCONFIG(TAG, "  Attenuation: 0db");
         break;
@@ -118,7 +101,7 @@ void ADCSensor::dump_config() {
       case ADC_ATTEN_DB_6:
         ESP_LOGCONFIG(TAG, "  Attenuation: 6db");
         break;
-      case ADC_ATTEN_DB_12_COMPAT:
+      case ADC_ATTEN_DB_12:
         ESP_LOGCONFIG(TAG, "  Attenuation: 12db");
         break;
       default:  // This is to satisfy the unused ADC_ATTEN_MAX
@@ -179,11 +162,7 @@ float ADCSensor::sample() {
     uint32_t sum = 0;
     for (uint8_t sample = 0; sample < this->sample_count_; sample++) {
       int raw = -1;
-      if (this->channel1_ != ADC1_CHANNEL_MAX) {
-        raw = adc1_get_raw(this->channel1_);
-      } else if (this->channel2_ != ADC2_CHANNEL_MAX) {
-        adc2_get_raw(this->channel2_, ADC_WIDTH_MAX_SOC_BITS, &raw);
-      }
+      ESP_ERROR_CHECK_WITHOUT_ABORT(adc_oneshot_read(ADCSensor::adc_handle, this->channel_, &raw));
       if (raw == -1) {
         return NAN;
       }
@@ -193,40 +172,34 @@ float ADCSensor::sample() {
     if (this->output_raw_) {
       return sum;
     }
-    uint32_t mv = esp_adc_cal_raw_to_voltage(sum, &this->cal_characteristics_[(int32_t) this->attenuation_]);
-    return mv / 1000.0f;
+
+    int mv = 0;
+    if (do_calibration) {
+      // maybe better? adc_oneshot_get_calibrated_result()
+      ESP_ERROR_CHECK_WITHOUT_ABORT(adc_cali_raw_to_voltage(adc_cali_handle, sum, &mv));
+      return mv / 1000.0f;
+    } else {
+      return NAN;
+    }
   }
 
   int raw12 = ADC_MAX, raw6 = ADC_MAX, raw2 = ADC_MAX, raw0 = ADC_MAX;
 
-  if (this->channel1_ != ADC1_CHANNEL_MAX) {
-    adc1_config_channel_atten(this->channel1_, ADC_ATTEN_DB_12_COMPAT);
-    raw12 = adc1_get_raw(this->channel1_);
-    if (raw12 < ADC_MAX) {
-      adc1_config_channel_atten(this->channel1_, ADC_ATTEN_DB_6);
-      raw6 = adc1_get_raw(this->channel1_);
-      if (raw6 < ADC_MAX) {
-        adc1_config_channel_atten(this->channel1_, ADC_ATTEN_DB_2_5);
-        raw2 = adc1_get_raw(this->channel1_);
-        if (raw2 < ADC_MAX) {
-          adc1_config_channel_atten(this->channel1_, ADC_ATTEN_DB_0);
-          raw0 = adc1_get_raw(this->channel1_);
-        }
-      }
-    }
-  } else if (this->channel2_ != ADC2_CHANNEL_MAX) {
-    adc2_config_channel_atten(this->channel2_, ADC_ATTEN_DB_12_COMPAT);
-    adc2_get_raw(this->channel2_, ADC_WIDTH_MAX_SOC_BITS, &raw12);
-    if (raw12 < ADC_MAX) {
-      adc2_config_channel_atten(this->channel2_, ADC_ATTEN_DB_6);
-      adc2_get_raw(this->channel2_, ADC_WIDTH_MAX_SOC_BITS, &raw6);
-      if (raw6 < ADC_MAX) {
-        adc2_config_channel_atten(this->channel2_, ADC_ATTEN_DB_2_5);
-        adc2_get_raw(this->channel2_, ADC_WIDTH_MAX_SOC_BITS, &raw2);
-        if (raw2 < ADC_MAX) {
-          adc2_config_channel_atten(this->channel2_, ADC_ATTEN_DB_0);
-          adc2_get_raw(this->channel2_, ADC_WIDTH_MAX_SOC_BITS, &raw0);
-        }
+  set_attenuation(ADC_ATTEN_DB_12);
+  adc_oneshot_config_channel(this->ADCSensor::adc_handle, this->channel_, &this->config);
+  adc_oneshot_read(this->ADCSensor::adc_handle, this->channel_, &raw12);
+  if (raw12 < ADC_MAX) {
+    set_attenuation(ADC_ATTEN_DB_6);
+    adc_oneshot_config_channel(this->ADCSensor::adc_handle, this->channel_, &this->config);
+    adc_oneshot_read(this->ADCSensor::adc_handle, this->channel_, &raw6);
+    if (raw6 < ADC_MAX) {
+      set_attenuation(ADC_ATTEN_DB_2_5);
+      adc_oneshot_config_channel(this->ADCSensor::adc_handle, this->channel_, &this->config);
+      adc_oneshot_read(this->ADCSensor::adc_handle, this->channel_, &raw2);
+      if (raw2 < ADC_MAX) {
+        set_attenuation(ADC_ATTEN_DB_0);
+        adc_oneshot_config_channel(this->ADCSensor::adc_handle, this->channel_, &this->config);
+        adc_oneshot_read(this->ADCSensor::adc_handle, this->channel_, &raw0);
       }
     }
   }
@@ -235,10 +208,17 @@ float ADCSensor::sample() {
     return NAN;
   }
 
-  uint32_t mv12 = esp_adc_cal_raw_to_voltage(raw12, &this->cal_characteristics_[(int32_t) ADC_ATTEN_DB_12_COMPAT]);
-  uint32_t mv6 = esp_adc_cal_raw_to_voltage(raw6, &this->cal_characteristics_[(int32_t) ADC_ATTEN_DB_6]);
-  uint32_t mv2 = esp_adc_cal_raw_to_voltage(raw2, &this->cal_characteristics_[(int32_t) ADC_ATTEN_DB_2_5]);
-  uint32_t mv0 = esp_adc_cal_raw_to_voltage(raw0, &this->cal_characteristics_[(int32_t) ADC_ATTEN_DB_0]);
+  adc_cali_handle_t cali_handle = NULL;
+
+  int mv12, mv6, mv2, mv0;
+  example_adc_calibration_init(this->init_config.unit_id, this->channel_, ADC_ATTEN_DB_12, &cali_handle);
+  ESP_ERROR_CHECK_WITHOUT_ABORT(adc_cali_raw_to_voltage(cali_handle, raw12, &mv12));
+  example_adc_calibration_init(this->init_config.unit_id, this->channel_, ADC_ATTEN_DB_6, &cali_handle);
+  ESP_ERROR_CHECK_WITHOUT_ABORT(adc_cali_raw_to_voltage(cali_handle, raw6, &mv6));
+  example_adc_calibration_init(this->init_config.unit_id, this->channel_, ADC_ATTEN_DB_2_5, &cali_handle);
+  ESP_ERROR_CHECK_WITHOUT_ABORT(adc_cali_raw_to_voltage(cali_handle, raw2, &mv2));
+  example_adc_calibration_init(this->init_config.unit_id, this->channel_, ADC_ATTEN_DB_0, &cali_handle);
+  ESP_ERROR_CHECK_WITHOUT_ABORT(adc_cali_raw_to_voltage(cali_handle, raw0, &mv0));
 
   // Contribution of each value, in range 0-2048 (12 bit ADC) or 0-4096 (13 bit ADC)
   uint32_t c12 = std::min(raw12, ADC_HALF);

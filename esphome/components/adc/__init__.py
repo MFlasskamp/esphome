@@ -1,11 +1,6 @@
-import esphome.codegen as cg
-import esphome.config_validation as cv
 from esphome import pins
-from esphome.const import CONF_ANALOG, CONF_INPUT, CONF_NUMBER
-
-from esphome.core import CORE
+import esphome.codegen as cg
 from esphome.components.esp32 import get_esp32_variant
-from esphome.const import PLATFORM_ESP8266
 from esphome.components.esp32.const import (
     VARIANT_ESP32,
     VARIANT_ESP32C2,
@@ -15,98 +10,91 @@ from esphome.components.esp32.const import (
     VARIANT_ESP32S2,
     VARIANT_ESP32S3,
 )
+import esphome.config_validation as cv
+from esphome.const import CONF_ANALOG, CONF_INPUT, CONF_NUMBER, PLATFORM_ESP8266
+from esphome.core import CORE
 
 CODEOWNERS = ["@esphome/core"]
 
 adc_ns = cg.esphome_ns.namespace("adc")
 
-
-"""
-From the below patch versions (and 5.2+) ADC_ATTEN_DB_11 is deprecated and replaced with ADC_ATTEN_DB_12.
-4.4.7
-5.0.5
-5.1.3
-5.2+
-"""
-
 ATTENUATION_MODES = {
     "0db": cg.global_ns.ADC_ATTEN_DB_0,
     "2.5db": cg.global_ns.ADC_ATTEN_DB_2_5,
     "6db": cg.global_ns.ADC_ATTEN_DB_6,
-    "11db": adc_ns.ADC_ATTEN_DB_12_COMPAT,
-    "12db": adc_ns.ADC_ATTEN_DB_12_COMPAT,
+    "12db": cg.global_ns.ADC_ATTEN_DB_12,
     "auto": "auto",
 }
 
-adc1_channel_t = cg.global_ns.enum("adc1_channel_t")
-adc2_channel_t = cg.global_ns.enum("adc2_channel_t")
+ADC_CHANNEL_t = cg.global_ns.enum("adc_channel_t")
+adc2_channel_t = cg.global_ns.enum("adc_channel_t")
 
 # From https://github.com/espressif/esp-idf/blob/master/components/driver/include/driver/adc_common.h
 # pin to adc1 channel mapping
 ESP32_VARIANT_ADC1_PIN_TO_CHANNEL = {
     VARIANT_ESP32: {
-        36: adc1_channel_t.ADC1_CHANNEL_0,
-        37: adc1_channel_t.ADC1_CHANNEL_1,
-        38: adc1_channel_t.ADC1_CHANNEL_2,
-        39: adc1_channel_t.ADC1_CHANNEL_3,
-        32: adc1_channel_t.ADC1_CHANNEL_4,
-        33: adc1_channel_t.ADC1_CHANNEL_5,
-        34: adc1_channel_t.ADC1_CHANNEL_6,
-        35: adc1_channel_t.ADC1_CHANNEL_7,
+        36: ADC_CHANNEL_t.ADC_CHANNEL_0,
+        37: ADC_CHANNEL_t.ADC_CHANNEL_1,
+        38: ADC_CHANNEL_t.ADC_CHANNEL_2,
+        39: ADC_CHANNEL_t.ADC_CHANNEL_3,
+        32: ADC_CHANNEL_t.ADC_CHANNEL_4,
+        33: ADC_CHANNEL_t.ADC_CHANNEL_5,
+        34: ADC_CHANNEL_t.ADC_CHANNEL_6,
+        35: ADC_CHANNEL_t.ADC_CHANNEL_7,
     },
     VARIANT_ESP32S2: {
-        1: adc1_channel_t.ADC1_CHANNEL_0,
-        2: adc1_channel_t.ADC1_CHANNEL_1,
-        3: adc1_channel_t.ADC1_CHANNEL_2,
-        4: adc1_channel_t.ADC1_CHANNEL_3,
-        5: adc1_channel_t.ADC1_CHANNEL_4,
-        6: adc1_channel_t.ADC1_CHANNEL_5,
-        7: adc1_channel_t.ADC1_CHANNEL_6,
-        8: adc1_channel_t.ADC1_CHANNEL_7,
-        9: adc1_channel_t.ADC1_CHANNEL_8,
-        10: adc1_channel_t.ADC1_CHANNEL_9,
+        1: ADC_CHANNEL_t.ADC_CHANNEL_0,
+        2: ADC_CHANNEL_t.ADC_CHANNEL_1,
+        3: ADC_CHANNEL_t.ADC_CHANNEL_2,
+        4: ADC_CHANNEL_t.ADC_CHANNEL_3,
+        5: ADC_CHANNEL_t.ADC_CHANNEL_4,
+        6: ADC_CHANNEL_t.ADC_CHANNEL_5,
+        7: ADC_CHANNEL_t.ADC_CHANNEL_6,
+        8: ADC_CHANNEL_t.ADC_CHANNEL_7,
+        9: ADC_CHANNEL_t.ADC_CHANNEL_8,
+        10: ADC_CHANNEL_t.ADC_CHANNEL_9,
     },
     VARIANT_ESP32S3: {
-        1: adc1_channel_t.ADC1_CHANNEL_0,
-        2: adc1_channel_t.ADC1_CHANNEL_1,
-        3: adc1_channel_t.ADC1_CHANNEL_2,
-        4: adc1_channel_t.ADC1_CHANNEL_3,
-        5: adc1_channel_t.ADC1_CHANNEL_4,
-        6: adc1_channel_t.ADC1_CHANNEL_5,
-        7: adc1_channel_t.ADC1_CHANNEL_6,
-        8: adc1_channel_t.ADC1_CHANNEL_7,
-        9: adc1_channel_t.ADC1_CHANNEL_8,
-        10: adc1_channel_t.ADC1_CHANNEL_9,
+        1: ADC_CHANNEL_t.ADC_CHANNEL_0,
+        2: ADC_CHANNEL_t.ADC_CHANNEL_1,
+        3: ADC_CHANNEL_t.ADC_CHANNEL_2,
+        4: ADC_CHANNEL_t.ADC_CHANNEL_3,
+        5: ADC_CHANNEL_t.ADC_CHANNEL_4,
+        6: ADC_CHANNEL_t.ADC_CHANNEL_5,
+        7: ADC_CHANNEL_t.ADC_CHANNEL_6,
+        8: ADC_CHANNEL_t.ADC_CHANNEL_7,
+        9: ADC_CHANNEL_t.ADC_CHANNEL_8,
+        10: ADC_CHANNEL_t.ADC_CHANNEL_9,
     },
     VARIANT_ESP32C3: {
-        0: adc1_channel_t.ADC1_CHANNEL_0,
-        1: adc1_channel_t.ADC1_CHANNEL_1,
-        2: adc1_channel_t.ADC1_CHANNEL_2,
-        3: adc1_channel_t.ADC1_CHANNEL_3,
-        4: adc1_channel_t.ADC1_CHANNEL_4,
+        0: ADC_CHANNEL_t.ADC_CHANNEL_0,
+        1: ADC_CHANNEL_t.ADC_CHANNEL_1,
+        2: ADC_CHANNEL_t.ADC_CHANNEL_2,
+        3: ADC_CHANNEL_t.ADC_CHANNEL_3,
+        4: ADC_CHANNEL_t.ADC_CHANNEL_4,
     },
     VARIANT_ESP32C2: {
-        0: adc1_channel_t.ADC1_CHANNEL_0,
-        1: adc1_channel_t.ADC1_CHANNEL_1,
-        2: adc1_channel_t.ADC1_CHANNEL_2,
-        3: adc1_channel_t.ADC1_CHANNEL_3,
-        4: adc1_channel_t.ADC1_CHANNEL_4,
+        0: ADC_CHANNEL_t.ADC_CHANNEL_0,
+        1: ADC_CHANNEL_t.ADC_CHANNEL_1,
+        2: ADC_CHANNEL_t.ADC_CHANNEL_2,
+        3: ADC_CHANNEL_t.ADC_CHANNEL_3,
+        4: ADC_CHANNEL_t.ADC_CHANNEL_4,
     },
     VARIANT_ESP32C6: {
-        0: adc1_channel_t.ADC1_CHANNEL_0,
-        1: adc1_channel_t.ADC1_CHANNEL_1,
-        2: adc1_channel_t.ADC1_CHANNEL_2,
-        3: adc1_channel_t.ADC1_CHANNEL_3,
-        4: adc1_channel_t.ADC1_CHANNEL_4,
-        5: adc1_channel_t.ADC1_CHANNEL_5,
-        6: adc1_channel_t.ADC1_CHANNEL_6,
+        0: ADC_CHANNEL_t.ADC_CHANNEL_0,
+        1: ADC_CHANNEL_t.ADC_CHANNEL_1,
+        2: ADC_CHANNEL_t.ADC_CHANNEL_2,
+        3: ADC_CHANNEL_t.ADC_CHANNEL_3,
+        4: ADC_CHANNEL_t.ADC_CHANNEL_4,
+        5: ADC_CHANNEL_t.ADC_CHANNEL_5,
+        6: ADC_CHANNEL_t.ADC_CHANNEL_6,
     },
     VARIANT_ESP32H2: {
-        0: adc1_channel_t.ADC1_CHANNEL_0,
-        1: adc1_channel_t.ADC1_CHANNEL_1,
-        2: adc1_channel_t.ADC1_CHANNEL_2,
-        3: adc1_channel_t.ADC1_CHANNEL_3,
-        4: adc1_channel_t.ADC1_CHANNEL_4,
+        0: ADC_CHANNEL_t.ADC_CHANNEL_0,
+        1: ADC_CHANNEL_t.ADC_CHANNEL_1,
+        2: ADC_CHANNEL_t.ADC_CHANNEL_2,
+        3: ADC_CHANNEL_t.ADC_CHANNEL_3,
+        4: ADC_CHANNEL_t.ADC_CHANNEL_4,
     },
 }
 

@@ -1,11 +1,9 @@
 import logging
 
 import esphome.codegen as cg
-import esphome.config_validation as cv
-import esphome.final_validate as fv
-from esphome.core import CORE
 from esphome.components import sensor, voltage_sampler
 from esphome.components.esp32 import get_esp32_variant
+import esphome.config_validation as cv
 from esphome.const import (
     CONF_ATTENUATION,
     CONF_ID,
@@ -17,6 +15,9 @@ from esphome.const import (
     STATE_CLASS_MEASUREMENT,
     UNIT_VOLT,
 )
+from esphome.core import CORE
+import esphome.final_validate as fv
+
 from . import (
     ATTENUATION_MODES,
     ESP32_VARIANT_ADC1_PIN_TO_CHANNEL,
@@ -127,10 +128,10 @@ async def to_code(config):
             and pin_num in ESP32_VARIANT_ADC1_PIN_TO_CHANNEL[variant]
         ):
             chan = ESP32_VARIANT_ADC1_PIN_TO_CHANNEL[variant][pin_num]
-            cg.add(var.set_channel1(chan))
+            cg.add(var.set_channel(chan))
         elif (
             variant in ESP32_VARIANT_ADC2_PIN_TO_CHANNEL
             and pin_num in ESP32_VARIANT_ADC2_PIN_TO_CHANNEL[variant]
         ):
             chan = ESP32_VARIANT_ADC2_PIN_TO_CHANNEL[variant][pin_num]
-            cg.add(var.set_channel2(chan))
+            cg.add(var.set_channel(chan))
